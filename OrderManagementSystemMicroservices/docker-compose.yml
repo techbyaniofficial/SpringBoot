@@ -1,0 +1,103 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres-container
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./docker/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
+    networks:
+      - oms-network
+
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: auth-service
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/authdb
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=pass
+      - JWT_SECRET=fhbfhsfjhsgfjsghcfhsccueyfeuyceuyfgeuyg7842874drgyg83rugyugd8347
+    depends_on:
+      - postgres
+    networks:
+      - oms-network
+
+  product-service:
+    build:
+      context: ./product-service
+      dockerfile: Dockerfile
+    container_name: product-service
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/productdb
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=pass
+      - JWT_SECRET=fhbfhsfjhsgfjsghcfhsccueyfeuyceuyfgeuyg7842874drgyg83rugyugd8347
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=host.docker.internal:9092
+    depends_on:
+      - postgres
+    networks:
+      - oms-network
+
+  order-service:
+    build:
+      context: ./order-service
+      dockerfile: Dockerfile
+    container_name: order-service
+    ports:
+      - "8083:8083"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/orderdb
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=pass
+      - JWT_SECRET=fhbfhsfjhsgfjsghcfhsccueyfeuyceuyfgeuyg7842874drgyg83rugyugd8347
+      - SERVICES_PRODUCT_URL=http://product-service:8082
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=host.docker.internal:9092
+    depends_on:
+      - postgres
+    networks:
+      - oms-network
+
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    container_name: notification-service
+    environment:
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=host.docker.internal:9092
+    networks:
+      - oms-network
+
+  analytics-service:
+    build:
+      context: ./analytics-service
+      dockerfile: Dockerfile
+    container_name: analytics-service
+    environment:
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=host.docker.internal:9092
+    networks:
+      - oms-network
+
+  log-viewer:
+    image: amir20/dozzle:latest
+    container_name: log-viewer
+    ports:
+      - "8888:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - oms-network
+
+networks:
+  oms-network:
+    driver: bridge
